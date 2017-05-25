@@ -1,5 +1,5 @@
 
-## mha_consul
+## mha_manager_consul
 
 Auto failover mysql with [masterha_manager](https://github.com/yoshinorim/mha4mysql-manager/tree/master/bin) based on consul cluster to avoid network instability.
 
