@@ -100,7 +100,11 @@ Using the following command to set acls:
 run the `checkmysql` on every consul server host, the token params is from above consul acl step, the tag option from the `db.cnf` configure file, which is the instance present:
 ```
 perl checkmysql --conf db.cnf --verbose --tag mysql3308 --token dcb5b583-cd36-d39d-2b31-558bebf86502
+[2017-05-25T10:09:14] mysql/mysql3308/cz-test2 with value 1 no change
+[2017-05-25T10:09:15] mysql/mysql3308/cz-test2 with value 1 no change
 ```
+the `cz-test2` means we run `checkmysql` in the cz-test2 host.
+
 #### note: if you have vip in MySQL master, the host option in `db.cnf` should be set the vip address.
  
 ### consul-template
