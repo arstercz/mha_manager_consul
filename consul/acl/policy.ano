@@ -1,0 +1,6 @@
+{
+  "ID": "anonymous",
+  "Name": "Anonymous Token",
+  "Type": "client",
+  "Rules": "{\"key\":{\"mysql/\":{\"policy\":\"deny\"}},\"operator\":\"read\"}"
+}

@@ -1,0 +1,21 @@
+{"services": [
+  {
+     "id": "consul1",
+     "name": "consul",
+     "address": "10.0.21.5",
+     "tags": ["consul"]
+  },
+  {
+     "id": "consul2",
+     "name": "consul",
+     "address": "10.0.21.7",
+     "tags": ["consul"]
+  },
+  {
+     "id": "consul3",
+     "name": "consul",
+     "address": "10.0.21.17",
+     "tags": ["consul"]
+  }
+ ]
+}

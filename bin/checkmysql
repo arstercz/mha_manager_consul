@@ -1,0 +1,209 @@
+#!/usr/bin/env perl
+=pod
+
+=head1 NAME
+
+mysqlcheck -- check mysql alive with ping method.
+
+=head1 SYNOPSIS
+
+Usage: mysqlcheck [OPTION...]
+
+=head1 RISKS
+
+=cut
+
+# cz 20170524
+
+use strict;
+use warnings;
+use Getopt::Long;
+use DBI;
+use DBD::mysql;
+use Data::Dumper;
+use Getopt::Long;
+use POSIX qw(strftime);
+use LWP::UserAgent;
+use HTTP::Request::Common;
+use Sys::Hostname;
+use MIME::Base64;
+use JSON;
+
+my($conf,$verbose,$tag,$help);
+my $consul = "localhost:8500";
+my $token;
+GetOptions(
+  "conf=s"   => \$conf,
+  "verbose!" => \$verbose,
+  "tag=s"    => \$tag,
+  "consul=s" => \$consul,
+  "token=s"  => \$token,
+  "help!"    => \$help,
+) or die "error:$!";
+
+if ($help) {
+  system("perldoc $0");
+  exit(0);
+}
+
+# get database file handle.
+$conf = "./$conf" if $conf && $conf =~ /^[^\/]/;
+sub get_dbh{
+  my $group = shift;
+  my $dsn = "DBI:mysql:mysql_read_default_file=$conf;"
+          . "mysql_read_default_group=$group";
+  
+  my $dbh = DBI->connect("$dsn", undef, undef);
+  return $dbh;
+}
+
+# get current key value
+sub get_curr_key {
+    my ( $ua, $tag, $key )   = @_;
+    my $keyurl = "http://$consul/v1/kv/mysql/$tag/$key"
+               . do { defined($token)
+                      ? "?token=$token"
+                      : ""
+                    }
+               ;
+
+    # get key value
+    my $res = $ua->get("$keyurl");
+    unless ($res->is_success) {
+       return;
+    }
+
+    my $decode = $res->decoded_content;
+    $decode    =~ s/(?:^\[|\]$)//g;
+    my $text = decode_json($decode);
+
+    my $value = defined($text->{'Value'})
+              ? decode_base64($text->{'Value'})
+              : undef ;
+    return $value;
+}
+
+# set alive key value
+sub set_alive_key {
+  my ( $ua, $tag, $key, $value) = @_;
+  my $keyurl = "http://$consul/v1/kv/mysql/$tag/$key"
+             . do { defined($token)
+                    ? "?token=$token"
+                    : ""
+                  }
+             ;
+  # post key value
+  my $request  = 
+    HTTP::Request::Common::PUT(
+       $keyurl,
+       'User-Agent' => 'memcheck_v0.1',
+       'Content' => "$value"
+    );
+  my $res = $ua->request($request);
+  #print Dumper($res);
+  unless ($res->is_success) {
+    return 0;
+  }
+  my $decode = $res->decoded_content;
+  if ($decode eq 'true') {
+    return "ok";
+  }
+  return;
+}
+
+sub get_time {
+  return 
+    strftime("%Y-%m-%dT%H:%M:%S", localtime(time));
+}
+
+sub echo_msg {
+  my $msg = shift;
+  my $now = get_time();
+  print "[$now] $msg\n";
+}
+
+my $host= hostname;
+
+# http client
+my $ua = LWP::UserAgent->new;
+$ua->timeout(3);
+
+while(1) {
+  my $dbh = get_dbh("$tag") || undef;
+  my $rc  = defined($dbh)
+          ? $dbh->ping()
+          : 0;
+  eval {
+    my $n = 3;
+    my $value = get_curr_key($ua, $tag, $host);
+    while(!defined($value) && $n && $n--) {
+      $value = get_curr_key($ua, $tag, $host);
+      $value = 2; # anothor value;
+    }
+    if ($value == $rc) {
+      echo_msg("mysql/$tag/$host with value $value no change");
+    } else { 
+      if ( set_alive_key($ua, $tag, $host, $rc) ) {
+        echo_msg("set $rc with key mysql/$tag/$host ok");
+      }
+      else {
+        echo_msg("set $rc with key mysql/$tag/$host error");
+      }
+    }
+    
+  };
+
+  if ($@) {
+    echo_msg("error - set key: $!") if $verbose;
+  }
+  sleep(1);
+}
+
+# ###################################################################
+# Documentation.
+# ###################################################################
+
+=head1 OPTIONS
+
+=over 4
+
+=item conf
+
+database config file, depend on DBD::mysql mysql_read_default_group
+method, eg:
+
+    [mysql3308]
+    database=information_schema
+    host=10.0.1.1
+    port=3308
+    user=dbuser
+    password=xxxxxxxx
+    default-character-set=utf8
+
+=item tag
+
+instance name from config file. such as mysql3308 with conf option.
+
+=item consul
+
+consul http address, default is "localhost:8500"
+
+=item token
+
+consul acl_token, default is undef.
+
+=item help
+
+print help info.
+
+=back
+
+=head1 AUTHOR
+
+zhe.chen <chenzhe07@gmail.com>
+
+=head1 CHANGELOG
+
+v0.1.0 version
+
+=cut

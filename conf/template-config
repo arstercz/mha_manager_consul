@@ -1,0 +1,59 @@
+# contained in this section pertain to Consul.
+consul {
+  address = "consul.service.consul:8500"
+
+  retry {
+    enabled = true
+    attempts = 3
+    backoff = "1s"
+  }
+  token = "dcb5b583-cd36-d39d-2b31-558bebf86502"
+}
+
+# signal to listen for to trigger a reload event
+reload_signal = "SIGHUP"
+
+# signal to listen for to trigger a core dump event.
+# dump_signal = "SIGQUIT"
+
+# signal to listen for to trigger a gracefull stop.
+kill_signal = "SIGINT"
+
+# maximum interval to allow "stale" data.
+max_stale = "10m"
+
+# log level
+log_level = "warn"
+
+# pid file
+pid_file = "/tmp/consul-template.pid"
+
+# quiescence timers.
+wait {
+  min = "2s"
+  max = "8s"
+}
+
+# logging
+syslog {
+  enabled = true
+  facility = "LOCAL5"
+}
+
+# template blocks
+template {
+  source = "/home/cz/consul/mysql3308.tpl"
+  destination = "/home/cz/consul/mysql3308.conf"
+
+  command = "masterha_manager_consul --cnf /home/cz/consul/mysql3308.conf --verbose --global_conf=/etc/masterha/app_default.cnf --conf=/etc/masterha/app_56.conf"
+  command_timeout = "30s"
+
+  perms = 0600
+  backup = true
+
+  # wait before redering a new template to disk and triggering a command.
+  wait {
+    min = "2s"
+    max = "8s"
+  }
+}

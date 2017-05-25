@@ -1,0 +1,300 @@
+#!/usr/bin/env perl
+
+#  Copyright (C) 2011 DeNA Co.,Ltd.
+#
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#   along with this program; if not, write to the Free Software
+#  Foundation, Inc.,
+#  51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#  Add consul features to ensure quorum check.
+#      author by cz 20170523
+
+use strict;
+use warnings FATAL => 'all';
+
+use English qw(-no_match_vars);
+use Getopt::Long qw(:config pass_through);
+use Pod::Usage;
+use MHA::MasterFailover;
+use MHA::ManagerConst;
+use MHA::MasterMonitor;
+use POSIX qw(ceil strftime);
+use Data::Dumper;
+
+BEGIN {
+  no warnings 'redefine';
+  use Carp qw(croak);
+  use Time::HiRes qw( sleep gettimeofday tv_interval );
+  *MHA::HealthCheck::wait_until_unreachable = sub ($) {
+    my $self           = shift;
+    my $log            = $self->{logger};
+    my $ssh_reachable  = 2;
+    my $error_count    = 0;
+    my $master_is_down = 0;
+   
+    my $n = 6;
+    eval {
+      while ($n && $n--) {
+        $self->{_tstart} = [gettimeofday];
+        if ( $self->{_need_reconnect} ) {
+          my ( $rc, $mysql_err ) =
+            $self->connect( undef, undef, undef, undef, undef, $error_count );
+          if ($rc) {
+            if ($mysql_err) {
+              if (
+                grep ( $_ == $mysql_err, @MHA::ManagerConst::ALIVE_ERROR_CODES )
+                > 0 )
+              {
+                $log->info(
+  "Got MySQL error $mysql_err, but this is not a MySQL crash. Continue health check.."
+                );
+                $self->sleep_until();
+                next;
+              }
+            }
+            $error_count++;
+            $log->warning("Connection failed $error_count time(s)..");
+            $self->handle_failing();
+   
+            if ( $error_count >= 4 ) {
+              $ssh_reachable = $self->is_ssh_reachable();
+              $master_is_down = 1 if ( $self->is_secondary_down() );
+              last if ($master_is_down);
+              $error_count = 0;
+            }
+            $self->sleep_until();
+            next;
+          }
+   
+          # connection ok
+          $self->{_need_reconnect} = 0;
+          $log->info(
+  "Ping($self->{ping_type}) succeeded, waiting until MySQL doesn't respond.."
+          );
+        }
+        $self->disconnect_if()
+          if ( $self->{ping_type} eq $MHA::ManagerConst::PING_TYPE_CONNECT );
+   
+        # Parent process forks one child process. The child process queries
+        # from MySQL every <interval> seconds. The child process may hang on
+        # executing queries.
+        # DBD::mysql 4.022 or earlier does not have an option to set
+        # read timeout, executing queries might take forever. To avoid this,
+        # the parent process kills the child process if it won't exit within
+        # <interval> seconds.
+   
+        my $child_exit_code;
+        eval {
+          if ( $self->{ping_type} eq $MHA::ManagerConst::PING_TYPE_CONNECT ) {
+            $child_exit_code = $self->fork_exec( sub { $self->ping_connect() },
+              "MySQL Ping($self->{ping_type})" );
+          }
+          elsif ( $self->{ping_type} eq $MHA::ManagerConst::PING_TYPE_SELECT ) {
+            $child_exit_code = $self->fork_exec( sub { $self->ping_select() },
+              "MySQL Ping($self->{ping_type})" );
+          }
+          elsif ( $self->{ping_type} eq $MHA::ManagerConst::PING_TYPE_INSERT ) {
+            $child_exit_code = $self->fork_exec( sub { $self->ping_insert() },
+              "MySQL Ping($self->{ping_type})" );
+          }
+          else {
+            die "Not supported ping_type!\n";
+          }
+        };
+        if ($@) {
+          my $msg = "Unexpected error heppened when pinging! $@";
+          $log->error($msg);
+          undef $@;
+          $child_exit_code = 1;
+        }
+   
+        if ( $child_exit_code == 0 ) {
+   
+          #ping ok
+          $self->update_status_ok();
+          if ( $error_count > 0 ) {
+            $error_count = 0;
+          }
+          $self->kill_sec_check();
+          $self->kill_ssh_check();
+        }
+        elsif ( $child_exit_code == 2 ) {
+          $self->{_already_monitored} = 1;
+          croak;
+        }
+        else {
+   
+          # failed on fork_exec
+          $error_count++;
+          $self->{_need_reconnect} = 1;
+          $self->handle_failing();
+        }
+        $self->sleep_until();
+      }
+      $log->warning("Master is not reachable from health checker!");
+    };
+    if ($@) {
+      my $msg = "Got error when monitoring master: $@";
+      $log->warning($msg);
+      undef $@;
+      return 2 if ( $self->{_already_monitored} );
+      return 1;
+    }
+    if ($n == 0) {
+        $log->warning("Check Master loop end by consul!");
+        return 1;
+    }
+    return 1 unless ($master_is_down);
+    return ( 0, $ssh_reachable );
+  };
+}
+
+my $help;
+my $version;
+my $cnf;
+my $verbose;
+
+$| = 1;
+
+GetOptions(
+  'help'    => \$help,
+  'version' => \$version,
+  'cnf=s'  => \$cnf,
+  'verbose!'=> \$verbose, 
+);
+
+if ($version) {
+  print "masterha_manager version $MHA::ManagerConst::VERSION.\n";
+  exit 0;
+}
+
+if ($help) {
+  pod2usage(0);
+}
+
+sub parse_cnf {
+  my $conf = shift;
+  open my $fh, '<', $conf
+    or die "open $conf error: $!";
+
+  my %node;
+  while(<$fh>) {
+    chomp;
+	next if /(?:^#|^$)/; # skip comment and blank line
+	if (/(\w+?):(\d)/) {
+      $node{$1} = $2 || 0;
+    }
+  }
+  return \%node;
+}
+
+# ensure 1 values is greater than half numbers
+sub check_status {
+  my $stat    = shift;
+  my $n       = 0;
+  my $key_num = (keys %$stat) + 0;
+  foreach my $v (values %$stat) {
+    $n++ if $v == 1;
+  }
+  if ( $n >= ceil($key_num/2) ) {
+    return "status ok";
+  }
+  return;
+}
+
+sub get_time {
+  return
+    strftime("%Y-%m-%dT%H:%M:%S", localtime(time));
+}
+
+sub echo_msg {
+  my $msg = shift;
+  my $now = get_time();
+  print "[$now] $msg\n";
+}
+
+# consul set file
+$cnf = "./$cnf" if $cnf && $cnf =~ /^[^\/]/;
+unless (-e $cnf) {
+  echo_msg("there is no conf file");
+  exit 1;
+}
+
+my $node_stat = parse_cnf($cnf);
+if ( check_status($node_stat) ) {
+  echo_msg("status ok, skip switch..") if $verbose;
+  exit 0;
+}
+else {
+  echo_msg("status error, need switch..") if $verbose;
+}
+
+# start fork, exit parent, continue as child processs.
+defined ( my $child_pid = fork() )
+  or die "Cannot fork: $OS_ERROR";
+if ($child_pid) {
+  # I'm the parent
+  exit 0;
+}
+
+# I'm the child
+my @ORIG_ARGV = @ARGV;
+my ( $exit_code, $dead_master, $ssh_reachable ) =
+  MHA::MasterMonitor::main( "--interactive=0", @ARGV );
+
+if ( $exit_code && $exit_code != $MHA::ManagerConst::MASTER_DEAD_RC ) {
+  exit $exit_code;
+}
+if ( !$dead_master->{hostname}
+  || !$dead_master->{ip}
+  || !$dead_master->{port}
+  || !defined($ssh_reachable) )
+{
+  exit 1;
+}
+
+@ARGV      = @ORIG_ARGV;
+$exit_code = MHA::MasterFailover::main(
+  "--master_state=dead",
+  "--interactive=0",
+  "--dead_master_host=$dead_master->{hostname}",
+  "--dead_master_ip=$dead_master->{ip}",
+  "--dead_master_port=$dead_master->{port}",
+  "--ssh_reachable=$ssh_reachable",
+  @ARGV
+);
+
+exit $exit_code;
+
+# ############################################################################
+# Documentation
+# ############################################################################
+
+=pod
+
+=head1 NAME
+
+masterha_manager - Monitoring MySQL master server availability and do failover if it detects master failure
+
+=head1 SYNOPSIS
+
+masterha_manager --global_conf=/etc/masterha_default.cnf --conf=/usr/local/masterha/conf/app1.cnf 
+
+See online reference (http://code.google.com/p/mysql-master-ha/wiki/masterha_manager) for details.
+
+=head1 DESCRIPTION
+
+See online reference (http://code.google.com/p/mysql-master-ha/wiki/masterha_manager) for details.
+
+=cut

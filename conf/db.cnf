@@ -1,0 +1,7 @@
+[mysql3308]
+database=information_schema
+host=10.0.21.97
+port=3308
+user=monitor
+password=xxxxxxxx
+default-character-set=utf8
