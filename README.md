@@ -10,7 +10,7 @@ perl-libwww-perl
 perl-JSON
 ```
 
-## Backgroud
+## Background
 
 We often don't use `masterha_manager` to make a auto mysql failover, because of the network instability(switch, cable or network card), for example, restart the host network card which the `masterha_manager` running on, then we know the MySQL is alive. From this aspect, we cannot determine whether MySQL master is dead or not depend only 1 check point.
 
@@ -34,12 +34,12 @@ Fortunately, We can use consul cluster features to check mysql health with multi
                      +----------------------+  watch
                      | consul-template      | -------> < mysqlxxx.tpl >  ---> <mysqlxxx.conf>
                      +----------------------+
-                                                                                  |
-                                                                                  | changed
-                                                                                  |
-                                                                      +--------------------------+  
-                                                                      | masterha_manager_consul  |
-                                                                      +--------------------------+
+                                                                                    |
+                                                                                    | changed
+                                                                                    |
+                                                                        +--------------------------+  
+                                                                        | masterha_manager_consul  |
+                                                                        +--------------------------+
 
 ```
 
@@ -114,6 +114,7 @@ perl checkmysql --conf db.cnf --verbose --tag mysql3308 --token dcb5b583-cd36-d3
 2017/05/25 10:11:13 [DEBUG] (logging) enabling syslog on LOCAL5
 ```
 
+mysqlxxx.tpl template file:
 ```
 # node3308
 {{ range ls "mysql/mysql3308" }}
