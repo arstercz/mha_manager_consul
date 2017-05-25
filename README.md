@@ -109,7 +109,9 @@ the `cz-test2` means we run `checkmysql` in the cz-test2 host.
  
 ### consul-template
 
-`consul-template` watch the keys based on mysqlxxx.tpl, when the keys changed, it generate mysqlxxx.conf file. We use mysql3308.tpl to explain:
+`consul-template` watch the keys based on mysqlxxx.tpl, when the keys changed, it generate mysqlxxx.conf file, only running on the host that have installed MHA manager.
+
+We use mysql3308.tpl to explain:
 
 #### start consul-template
 
