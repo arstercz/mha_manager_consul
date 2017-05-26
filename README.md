@@ -82,7 +82,7 @@ test env:
 
 ### Note
 
-All the following steps are assume you have  installed consul cluster, and before run `checkmysql`, we must set consul acls to ensure that don't anyone access consul api directly.
+All the following steps are assume you have  installed consul cluster(the consul servers should be deployed in different racks), and before run `checkmysql`, we must set consul acls to ensure that don't anyone access consul api directly.
 
 The token params is the option `acl_master_token` which in you consul server configure file, the `policy.ano` is used to disable anonymous to access the related key `mysql/*`, and `policy.key` is used to enable the specifed token (`dcb5b583-cd36-d39d-2b31-558bebf86502`) to access the related key `mysql/*`. read more from [consul acl](https://www.consul.io/api/acl.html)
 
