@@ -49,6 +49,8 @@ After all `checkmysql` update consul keys, we use [consul-template](https://gith
 
 We have rewrite the `masterha_manager_consul`, the method `MHA::HealthCheck::wait_until_unreachable` will not running with infinite loop way, and it'll exit if there is less than half number consul servers check the MySQL is abnormal, oterhwise `masterha_manager_consul` will fork a child process to execute failover. 
 
+#### note `masterha_manager_consul` is based on MHA v0.5.6
+
 ## How to use
 
 the full code structure:
