@@ -128,6 +128,8 @@ my $host= hostname;
 my $ua = LWP::UserAgent->new;
 $ua->timeout(3);
 
+$| = 1;
+
 while(1) {
   my $dbh = get_dbh("$tag") || undef;
   my $rc  = defined($dbh)
