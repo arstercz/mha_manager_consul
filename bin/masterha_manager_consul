@@ -164,13 +164,15 @@ my $help;
 my $version;
 my $cnf;
 my $verbose;
+my $night = 1;
 
 $| = 1;
 
 GetOptions(
   'help'    => \$help,
   'version' => \$version,
-  'cnf=s'  => \$cnf,
+  'cnf=s'   => \$cnf,
+  'night!'  => \$night,
   'verbose!'=> \$verbose, 
 );
 
@@ -229,6 +231,16 @@ $cnf = "./$cnf" if $cnf && $cnf =~ /^[^\/]/;
 unless (-e $cnf) {
   echo_msg("there is no conf file");
   exit 1;
+}
+
+# only swith in night, default is yes;
+if ($night) {
+  my @a = localtime(time);
+  if ($a[2] > 8 && $a[a] < 20) {
+    print "only switch in night 21:00 ~ 09:00\n"
+          . "you can disbale with --night 0\n";
+    exit 0;
+  }
 }
 
 my $node_stat = parse_cnf($cnf);
