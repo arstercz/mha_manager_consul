@@ -28,8 +28,10 @@ use HTTP::Request::Common;
 use Sys::Hostname;
 use MIME::Base64;
 use JSON;
+use Net::Ping;
+use Config::IniFiles;
 
-my($conf,$verbose,$tag,$help);
+my($conf,$verbose,$tag,$night,$help);
 my $consul = "localhost:8500";
 my $token;
 GetOptions(
@@ -38,6 +40,7 @@ GetOptions(
   "tag=s"    => \$tag,
   "consul=s" => \$consul,
   "token=s"  => \$token,
+  "night!"   => \$night,
   "help!"    => \$help,
 ) or die "error:$!";
 
@@ -50,7 +53,8 @@ if ($help) {
 $conf = "./$conf" if $conf && $conf =~ /^[^\/]/;
 sub get_dbh{
   my $group = shift;
-  my $dsn = "DBI:mysql:mysql_read_default_file=$conf;"
+  my $dsn = "DBI:mysql:mysql_connect_timeout=1;"
+          . "mysql_read_default_file=$conf;"
           . "mysql_read_default_group=$group";
   
   my $dbh = DBI->connect("$dsn", undef, undef);
@@ -111,6 +115,42 @@ sub set_alive_key {
   return;
 }
 
+sub get_ip{
+  my $cfg = Config::IniFiles->new( -file => "$conf" );
+  return $cfg->val( "$tag", 'host');
+}
+
+sub host_is_alive {
+  my $ip = shift;
+  my $t = 0;
+  my $n = 3;
+  # check 3 times
+  my $p  = Net::Ping->new("icmp", 1);
+  while($n && $n--) {
+    my $ping_ok = $p->ping($ip);
+    $t += 1 if $ping_ok;
+    select(undef, undef, undef, 0.2);
+  }
+  if ($t > 0) {
+    echo_msg("host $ip is reachable");
+    return 1;
+  }
+  else {
+    echo_msg("host $ip is not reachable");
+    return 0;
+  }
+}
+
+sub night_check_skip {
+  my @tm = localtime(time);
+  if ($tm[2] > 8 && $tm[2] < 20) {
+    echo_msg("only switch in night 21:00 ~ 09:00, "
+             . "you can disbale with no option --night");
+    return 1;
+  }
+  return 0;
+}
+
 sub get_time {
   return 
     strftime("%Y-%m-%dT%H:%M:%S", localtime(time));
@@ -135,16 +175,28 @@ while(1) {
   my $rc  = defined($dbh)
           ? $dbh->ping()
           : 0;
+  my $ip  = get_ip($dbh);
   eval {
     my $n = 3;
     my $value = get_curr_key($ua, $tag, $host);
     while(!defined($value) && $n && $n--) {
       $value = get_curr_key($ua, $tag, $host);
-      $value = 2; # anothor value;
+      $value ||= 2 if $n == 0; # except value;
     }
+    if ($rc == 0) {
+      # only send 0 in night
+      if($night && night_check_skip) {
+        $rc = 1;
+      }
+      # if host is down, skip the nigth check
+      unless(host_is_alive($ip)) {
+        $rc = 0;
+      }
+    }
+    print "$value, rc: $rc\n";
     if ($value == $rc) {
       echo_msg("mysql/$tag/$host with value $value no change");
-    } else { 
+    } else {
       if ( set_alive_key($ua, $tag, $host, $rc) ) {
         echo_msg("set $rc with key mysql/$tag/$host ok");
       }
@@ -193,6 +245,10 @@ consul http address, default is "localhost:8500"
 =item token
 
 consul acl_token, default is undef.
+
+=item night
+
+only send 0 value to consul in 09:00 ~ 20:00, but not effect when server is down.
 
 =item help
 
