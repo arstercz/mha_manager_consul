@@ -30,9 +30,11 @@ use MIME::Base64;
 use JSON;
 use Net::Ping;
 use Config::IniFiles;
+use IO::Socket::INET;
 
 my($conf,$verbose,$tag,$night,$help);
-my $consul = "localhost:8500";
+my $consul  = "localhost:8500";
+my $sshport = 22;
 my $token;
 GetOptions(
   "conf=s"   => \$conf,
@@ -41,6 +43,7 @@ GetOptions(
   "consul=s" => \$consul,
   "token=s"  => \$token,
   "night!"   => \$night,
+  "sshport=i"=> \$sshport,
   "help!"    => \$help,
 ) or die "error:$!";
 
@@ -120,7 +123,7 @@ sub get_ip{
   return $cfg->val( "$tag", 'host');
 }
 
-sub host_is_alive {
+sub ping_is_alive {
   my $ip = shift;
   my $t = 0;
   my $n = 3;
@@ -132,11 +135,34 @@ sub host_is_alive {
     select(undef, undef, undef, 0.2);
   }
   if ($t > 0) {
-    echo_msg("host $ip is reachable");
+    echo_msg("ping host $ip is reachable");
     return 1;
   }
   else {
-    echo_msg("host $ip is not reachable");
+    echo_msg("ping host $ip is not reachable");
+    return 0;
+  }
+}
+
+sub ssh_is_alive {
+  my $ip = shift;
+  my $t = 0;
+  my $n = 2;
+
+  while($n && $n--) {
+    my $socket = IO::Socket::INET->new(
+      PeerAddr => $ip,
+      PeerPort => $sshport,
+      Proto    => 'tcp',
+      Timeout  => 2
+    ) || $t++;
+  }
+  if ($t <= 1) {
+    echo_msg("ssh host $ip:$sshport is reachable");
+    return 1;
+  }
+  else {
+    echo_msg("ssh host $ip:$sshport is not reachable");
     return 0;
   }
 }
@@ -189,11 +215,11 @@ while(1) {
         $rc = 1;
       }
       # if host is down, skip the nigth check
-      unless(host_is_alive($ip)) {
+      unless((ssh_is_alive($ip) 
+               && ping_is_alive($ip))) {
         $rc = 0;
       }
     }
-    print "$value, rc: $rc\n";
     if ($value == $rc) {
       echo_msg("mysql/$tag/$host with value $value no change");
     } else {
@@ -249,6 +275,10 @@ consul acl_token, default is undef.
 =item night
 
 only send 0 value to consul in 09:00 ~ 20:00, but not effect when server is down.
+
+=item sshport
+
+check the MySQL host ssh port when MySQL abnormal, default is 22.
 
 =item help
 
