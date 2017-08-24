@@ -8,6 +8,7 @@ Auto failover mysql with [masterha_manager](https://github.com/yoshinorim/mha4my
 ```
 perl-libwww-perl
 perl-JSON
+perl-Config-IniFiles
 ```
 
 ## Background
