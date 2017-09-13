@@ -94,10 +94,10 @@ The token params is the option `acl_master_token` which in you consul server con
 
 Using the following command to set acls:
 ```
-#curl -X PUT --data @policy.ano http://localhost:8500/v1/acl/update?token=e95597e0-4045-11e7-a9ef-b6ba84687927
+#curl -X PUT --data @policy.ano http://localhost:8500/v1/acl/create?token=e95597e0-4045-11e7-a9ef-b6ba84687927
 {"ID":"anonymous"}
 
-#curl -X PUT --data @policy.key http://localhost:8500/v1/acl/update?token=e95597e0-4045-11e7-a9ef-b6ba84687927
+#curl -X PUT --data @policy.key http://localhost:8500/v1/acl/create?token=e95597e0-4045-11e7-a9ef-b6ba84687927
 {"ID":"dcb5b583-cd36-d39d-2b31-558bebf86502"}
 ```
 
