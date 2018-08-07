@@ -2,7 +2,11 @@
 ## mha_manager_consul
 
 [中文说明](https://arstercz.com/%E5%9F%BA%E4%BA%8E-consul-%E6%9E%B6%E6%9E%84%E7%9A%84-mha-%E8%87%AA%E5%8A%A8%E5%88%87%E6%8D%A2/)
+
 Auto failover mysql with [masterha_manager](https://github.com/yoshinorim/mha4mysql-manager/tree/master/bin) based on consul cluster to avoid network instability.
+
+*note*: `mha_manager_consul` can be used with [mha_switch](https://github.com/arstercz/mha_switch) .
+
 
 ## Dependency
 

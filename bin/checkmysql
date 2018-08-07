@@ -169,8 +169,8 @@ sub ssh_is_alive {
 
 sub night_check_skip {
   my @tm = localtime(time);
-  if ($tm[2] > 8 && $tm[2] < 20) {
-    echo_msg("only switch in night 21:00 ~ 09:00, "
+  if ($tm[2] >= 8 && $tm[2] <= 21) {
+    echo_msg("only switch in night 22:00 ~ 08:00, "
              . "you can disbale with no option --night");
     return 1;
   }
