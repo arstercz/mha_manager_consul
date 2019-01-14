@@ -189,6 +189,8 @@ sub echo_msg {
 }
 
 my $host= hostname;
+my $dbh = get_dbh("$tag") || undef;
+$dbh->{'mysql_auto_reconnect'} = 1;
 
 # http client
 my $ua = LWP::UserAgent->new;
@@ -197,7 +199,6 @@ $ua->timeout(3);
 $| = 1;
 
 while(1) {
-  my $dbh = get_dbh("$tag") || undef;
   my $rc  = defined($dbh)
           ? $dbh->ping()
           : 0;
