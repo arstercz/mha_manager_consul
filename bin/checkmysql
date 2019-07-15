@@ -58,7 +58,8 @@ sub get_dbh{
   my $group = shift;
   my $dsn = "DBI:mysql:mysql_connect_timeout=1;"
           . "mysql_read_default_file=$conf;"
-          . "mysql_read_default_group=$group";
+          . "mysql_read_default_group=$group;"
+          . "mysql_read_timeout=1";
   
   my $dbh = DBI->connect("$dsn", undef, undef);
   return $dbh;
