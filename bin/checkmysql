@@ -56,12 +56,12 @@ if ($help) {
 $conf = "./$conf" if $conf && $conf =~ /^[^\/]/;
 sub get_dbh{
   my $group = shift;
-  my $dsn = "DBI:mysql:mysql_connect_timeout=1;"
+  my $dsn = "DBI:mysql:mysql_connect_timeout=3;"
           . "mysql_read_default_file=$conf;"
           . "mysql_read_default_group=$group;"
-          . "mysql_read_timeout=1";
+          . "mysql_read_timeout=3";
   
-  my $dbh = DBI->connect("$dsn", undef, undef);
+  my $dbh = DBI->connect("$dsn", undef, undef, {mysql_auto_reconnect => 1, RaiseError => 1});
   return $dbh;
 }
 
@@ -196,13 +196,13 @@ my $ua = LWP::UserAgent->new;
 $ua->timeout(3);
 
 $| = 1;
+my $dbh = get_dbh("$tag") || undef;
 
 while(1) {
-  my $dbh = get_dbh("$tag") || undef;
   my $rc  = defined($dbh)
           ? $dbh->ping()
           : 0;
-  my $ip  = get_ip($dbh);
+  my $ip  = get_ip();
   eval {
     my $n = 3;
     my $value = get_curr_key($ua, $tag, $host);
