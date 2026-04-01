@@ -192,7 +192,7 @@ sub parse_cnf {
   while(<$fh>) {
     chomp;
 	next if /(?:^#|^$)/; # skip comment and blank line
-	if (/(\w+?):(\d)/) {
+	if (/(\w+?):(\d{0,})/) {
       $node{$1} = $2 || 0;
     }
   }

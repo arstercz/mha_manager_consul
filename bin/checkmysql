@@ -199,9 +199,13 @@ $| = 1;
 my $dbh = get_dbh("$tag") || undef;
 
 while(1) {
-  my $rc  = defined($dbh)
-          ? $dbh->ping()
-          : 0;
+  if (defined($dbh)) {
+    eval {
+      $rc = $dbh->ping() ? 1 : 0;
+    };
+    $rc = 0 if $@;
+  }
+
   my $ip  = get_ip();
   eval {
     my $n = 3;
